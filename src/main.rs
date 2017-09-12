@@ -23,7 +23,7 @@ fn main() {
     }
 
     if !upstream_name_part.is_empty() {
-        prompt += "/";
+        prompt += ":";
         prompt += upstream_name_part.as_str();
     }
     println!("{}", prompt);

@@ -2,6 +2,7 @@ extern crate git2;
 
 use std::path::Path;
 use std::path::PathBuf;
+use std::fmt::Write;
 
 pub struct GitPromptRepo {
     lg2_repo: Option<git2::Repository>,
@@ -62,7 +63,7 @@ impl GitPromptRepo {
         None
     }
 
-    fn is_branch_with_upstream(&self) -> bool {
+    fn head_branch_has_upstream(&self) -> bool {
         if let Some(branch) = self.head_to_branch() {
             return branch.upstream().is_ok();
         }
@@ -83,11 +84,24 @@ impl GitPromptRepo {
         } else if self.has_head {
             ref_string = self.head_name();
         }
+        if ref_string == "HEAD" {
+            let head_reference = self.lg2_repo
+                .as_ref()
+                .unwrap()
+                .head()
+                .unwrap()
+                .resolve()
+                .unwrap();
+            let head_oid = head_reference.target().unwrap();
+            ref_string.clear();
+            write!(ref_string, "{}", head_oid).unwrap();
+            ref_string.truncate(8);
+        }
         ref_string.to_string()
     }
 
     pub fn upstream_name(&self) -> String {
-        if self.is_branch_with_upstream() {
+        if self.head_branch_has_upstream() {
             let branch = self.head_to_branch().unwrap();
             let upstream_branch = branch.upstream().unwrap();
             if let Ok(Some(name)) = upstream_branch.name() {
@@ -99,8 +113,22 @@ impl GitPromptRepo {
 
     pub fn ahead_behind(&self) -> String {
         let mut result = String::from("");
-        if self.is_branch_with_upstream() {
-            result = String::from("↓·3↑·1");
+        if self.head_branch_has_upstream() {
+            let head_branch = self.head_to_branch().unwrap();
+            let upstream_branch = head_branch.upstream().unwrap();
+            let head_branch_oid = head_branch.get().resolve().unwrap().target().unwrap();
+            let upstream_branch_oid = upstream_branch.get().resolve().unwrap().target().unwrap();
+            let repo = self.lg2_repo.as_ref().unwrap();
+            let (ahead, behind) = repo.graph_ahead_behind(head_branch_oid, upstream_branch_oid)
+                .unwrap();
+            if behind > 0 {
+                result += "↓·";
+                result += &*behind.to_string();
+            }
+            if ahead > 0 {
+                result += "↑·";
+                result += &*ahead.to_string();
+            }
         }
         result
     }
