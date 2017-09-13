@@ -1,0 +1,10 @@
+{
+	"folders":
+	[
+		{
+			"path": ".",
+			"file_exclude_patterns" : ["*.sublime-workspace", "Cargo.lock"],
+			"folder_exclude_patterns" : ["target"]
+		}
+	]
+}
