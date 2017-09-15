@@ -10,6 +10,7 @@ pub struct GitPromptRepo {
     root_path: PathBuf,
     is_unborn: bool,
     has_head: bool,
+    has_checkout: bool,
 }
 
 
@@ -19,6 +20,7 @@ impl GitPromptRepo {
         let mut root_path = PathBuf::new();
         let mut is_unborn = false;
         let mut has_head = false;
+        let mut has_checkout = false;
 
         if let Some(ref repo) = lg2_repo {
             root_path = repo.path().to_path_buf();
@@ -27,6 +29,7 @@ impl GitPromptRepo {
             } else {
                 has_head = true;
             }
+            has_checkout = !repo.is_bare();
         }
 
         GitPromptRepo {
@@ -35,6 +38,7 @@ impl GitPromptRepo {
             root_path: root_path,
             is_unborn: is_unborn,
             has_head: has_head,
+            has_checkout: has_checkout,
         }
     }
 
@@ -132,4 +136,36 @@ impl GitPromptRepo {
         }
         result
     }
+
+    pub fn status(&self) -> String {
+        let mut result = String::from("");
+        if self.has_checkout {
+            if let Ok(statuses) = self.lg2_repo.as_ref().unwrap().statuses(None) {
+                result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_MODIFIED, "∂");
+                result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_NEW, "…");
+                result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_DELETED, "✖");
+                result +=
+                    &status_bit_to_string(&statuses, git2::STATUS_CONFLICTED, "\x1b[31;1m≠");
+                result += &status_bit_to_string(&statuses, git2::STATUS_WT_MODIFIED, "\x1b[34m∂");
+                result += &status_bit_to_string(&statuses, git2::STATUS_WT_NEW, "\x1b[34m…");
+                result += &status_bit_to_string(&statuses, git2::STATUS_WT_DELETED, "\x1b[34m✖");
+            }
+            if result.is_empty() {
+                result = String::from("\x1b[36m√\x1b[m");
+            }
+        }
+        result
+    }
+}
+
+fn status_bit_to_string(statuses: &git2::Statuses, flag: git2::Status, prefix: &str) -> String {
+    let count = statuses
+        .iter()
+        .filter(|s| s.status().contains(flag))
+        .count();
+    let mut result = "".to_string();
+    if count > 0 {
+        write!(result, "{}{}\x1b[m", prefix, count).unwrap();
+    }
+    result
 }
