@@ -8,7 +8,7 @@ fn main() {
     let repo = GitPromptRepo::new(Path::new("."));
     let mut prompt = "".to_string();
 
-    let ref_name_part = repo.ref_name();
+    let ref_name_part = repo.ref_name_head();
     let ahead_behind_part = repo.ahead_behind();
     let upstream_name_part = repo.upstream_name();
     let status_part = repo.status();

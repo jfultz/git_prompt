@@ -81,7 +81,14 @@ impl GitPromptRepo {
     //     }
     // }
 
-    pub fn ref_name(&self) -> String {
+    fn build_ref_name_for_commit(&self, commit: &git2::Commit, ref_string: &mut String) {
+        let oid = commit.id();
+        ref_string.clear();
+        write!(ref_string, "{}", oid).unwrap();
+        ref_string.truncate(8);
+    }
+
+    pub fn ref_name_head(&self) -> String {
         let mut ref_string = "".to_string();
         if self.is_unborn {
             ref_string = "[Unborn]".to_string();
@@ -89,17 +96,17 @@ impl GitPromptRepo {
             ref_string = self.head_name();
         }
         if ref_string == "HEAD" {
-            let head_reference = self.lg2_repo
+            let head_object = self.lg2_repo
                 .as_ref()
                 .unwrap()
                 .head()
                 .unwrap()
                 .resolve()
+                .unwrap()
+                .peel(git2::ObjectType::Commit)
                 .unwrap();
-            let head_oid = head_reference.target().unwrap();
-            ref_string.clear();
-            write!(ref_string, "{}", head_oid).unwrap();
-            ref_string.truncate(8);
+            let head_commit = head_object.as_commit().unwrap();
+            self.build_ref_name_for_commit(head_commit, &mut ref_string);
         }
         ref_string.to_string()
     }
