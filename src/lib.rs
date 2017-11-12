@@ -83,9 +83,35 @@ impl GitPromptRepo {
 
     fn build_ref_name_for_commit(&self, commit: &git2::Commit, ref_string: &mut String) {
         let oid = commit.id();
+        let mut candidate_branch_names = Vec::new();
+        let branches_it = self.lg2_repo
+            .as_ref()
+            .unwrap()
+            .branches(Some(git2::BranchType::Remote))
+            .unwrap()
+            .filter_map(|branch_result| branch_result.ok());
+        for branch in branches_it {
+            let ref branch_ref = branch.0.get();
+            let peeled_obj_res = branch_ref.peel(git2::ObjectType::Commit);
+            if peeled_obj_res.is_ok() && peeled_obj_res.unwrap().id() == oid
+                && branch_ref.name().is_some()
+            {
+                candidate_branch_names.push(branch_ref.name().unwrap().to_string());
+            }
+        }
         ref_string.clear();
-        write!(ref_string, "{}", oid).unwrap();
-        ref_string.truncate(8);
+        if candidate_branch_names.is_empty() {
+            let mut oid_string = "".to_string();
+            write!(oid_string, "{}", oid).unwrap();
+            oid_string.truncate(8);
+            write!(ref_string, "{}", oid_string);
+        } else {
+            write!(
+                ref_string,
+                "{}",
+                find_best_branch_name(candidate_branch_names)
+            );
+        }
     }
 
     pub fn ref_name_head(&self) -> String {
@@ -175,4 +201,36 @@ fn status_bit_to_string(statuses: &git2::Statuses, flag: git2::Status, prefix: &
         write!(result, "{}{}\x1b[m", prefix, count).unwrap();
     }
     result
+}
+
+fn abbreviated_remote_branch_name(full_name: &String) -> Option<String> {
+    let mut full_name_it = full_name.split('/').peekable();
+    if full_name_it.next() == Some("refs") && full_name_it.next() == Some("remotes")
+        && full_name_it.peek().is_some()
+    {
+        let mut abbreviated_name = full_name_it.next().unwrap().to_string();
+        if full_name_it.peek().is_some()
+            && full_name_it.peek().unwrap().to_string() == "HEAD".to_string()
+        {
+            return None;
+        }
+        for s in full_name_it {
+            abbreviated_name.push('/');
+            abbreviated_name.push_str(s);
+        }
+        if !abbreviated_name.is_empty() {
+            return Some(abbreviated_name);
+        }
+    }
+    None
+}
+
+fn find_best_branch_name(branch_names: Vec<String>) -> String {
+    let working_branch_names: Vec<String> = branch_names
+        .iter()
+        .filter_map(abbreviated_remote_branch_name)
+        .filter(|b| b != "HEAD")
+        .collect();
+
+    working_branch_names[0].clone()
 }
