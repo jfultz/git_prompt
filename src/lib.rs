@@ -104,13 +104,13 @@ impl GitPromptRepo {
             let mut oid_string = "".to_string();
             write!(oid_string, "{}", oid).unwrap();
             oid_string.truncate(8);
-            write!(ref_string, "{}", oid_string);
+            write!(ref_string, "{}", oid_string).unwrap();
         } else {
             write!(
                 ref_string,
                 "{}",
                 find_best_branch_name(candidate_branch_names)
-            );
+            ).unwrap();
         }
     }
 
@@ -173,7 +173,12 @@ impl GitPromptRepo {
     pub fn status(&self) -> String {
         let mut result = String::from("");
         if self.has_checkout {
-            if let Ok(statuses) = self.lg2_repo.as_ref().unwrap().statuses(None) {
+            let mut opts = git2::StatusOptions::new();
+            if let Ok(statuses) = self.lg2_repo.as_ref().unwrap().statuses(Some(
+                opts.update_index(true)
+                    .include_untracked(true)
+                    .recurse_untracked_dirs(true),
+            )) {
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_MODIFIED, "∂");
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_NEW, "…");
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_DELETED, "✖");
