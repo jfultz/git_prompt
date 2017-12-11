@@ -229,11 +229,27 @@ fn abbreviated_remote_branch_name(full_name: &String) -> Option<String> {
 }
 
 fn find_best_branch_name(branch_names: Vec<String>) -> String {
+    // Transmute branch names into canonical shortened forms.
+    // Also, remove all variants terminating in HEAD
     let working_branch_names: Vec<String> = branch_names
         .iter()
         .filter_map(abbreviated_remote_branch_name)
         .filter(|b| b != "HEAD")
         .collect();
 
-    working_branch_names[0].clone()
+    // Determine the minimum namespace depth of the names and
+    // filter the list to include only those at the minimum depth.
+    // The theory here is that we want to produce the "simplest" name,
+    // and minimizing the depth should be done before, e.g., minimizing
+    // the charcount
+    let slash_counts: Vec<usize> = working_branch_names
+        .iter()
+        .map(|s| s.chars().filter(|c| c == &'/').count())
+        .collect();
+    let min_slashes = slash_counts.iter().min().unwrap();
+    let branch_and_count_iter = working_branch_names.into_iter().zip(slash_counts.iter());
+    let sifted_branch_names: Vec<String> = branch_and_count_iter
+        .filter_map(|t| if t.1 == min_slashes { Some(t.0) } else { None })
+        .collect();
+    sifted_branch_names[0].clone()
 }
