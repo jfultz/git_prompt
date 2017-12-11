@@ -214,9 +214,7 @@ fn abbreviated_remote_branch_name(full_name: &String) -> Option<String> {
         && full_name_it.peek().is_some()
     {
         let mut abbreviated_name = full_name_it.next().unwrap().to_string();
-        if full_name_it.peek().is_some()
-            && full_name_it.peek().unwrap().to_string() == "HEAD".to_string()
-        {
+        if full_name_it.peek().unwrap_or(&"").to_string() == "HEAD".to_string() {
             return None;
         }
         for s in full_name_it {
