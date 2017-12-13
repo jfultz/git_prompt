@@ -1,4 +1,5 @@
 extern crate git2;
+// TODO: Investigate ansi_term crate.  https://crates.io/crates/ansi_term
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -116,8 +117,44 @@ impl GitPromptRepo {
 
     pub fn ref_name_head(&self) -> String {
         let mut ref_string = "".to_string();
+        // TODO: should instead check self.lg2_repo.state()
         if self.is_unborn {
             ref_string = "[Unborn]".to_string();
+        } else if let Ok(rebasing_ref) = self.lg2_repo
+            .as_ref()
+            .unwrap()
+            .find_reference("rebase-apply/orig-head")
+        {
+            // TODO: Should look at .git/rebase-apply/head-name rather than compute rebasing_name as we do here
+            let onto_ref = self.lg2_repo
+                .as_ref()
+                .unwrap()
+                .find_reference("rebase-apply/onto")
+                .unwrap();
+            let mut rebasing_name = String::new();
+            let mut onto_name = String::new();
+            self.build_ref_name_for_commit(
+                rebasing_ref
+                    .peel(git2::ObjectType::Commit)
+                    .unwrap()
+                    .as_commit()
+                    .unwrap(),
+                &mut rebasing_name,
+            );
+            self.build_ref_name_for_commit(
+                onto_ref
+                    .peel(git2::ObjectType::Commit)
+                    .unwrap()
+                    .as_commit()
+                    .unwrap(),
+                &mut onto_name,
+            );
+            write!(
+                ref_string,
+                "\x1b[1;35m...rebasing\x1b[0m {} \x1b[1;35monto\x1b[0m {}",
+                rebasing_name,
+                onto_name
+            ).unwrap();
         } else if self.has_head {
             ref_string = self.head_name();
         }
