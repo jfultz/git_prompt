@@ -2,13 +2,14 @@ extern crate git2;
 // TODO: Investigate ansi_term crate.  https://crates.io/crates/ansi_term
 
 use std::path::Path;
-use std::path::PathBuf;
+// use std::path::PathBuf;
 use std::fmt::Write;
 
 pub struct GitPromptRepo {
     lg2_repo: Option<git2::Repository>,
-    origin_path: PathBuf,
-    root_path: PathBuf,
+    // origin_path: PathBuf,
+    // root_path: PathBuf,
+    repo_state: git2::RepositoryState,
     is_unborn: bool,
     has_head: bool,
     has_checkout: bool,
@@ -18,13 +19,15 @@ pub struct GitPromptRepo {
 impl GitPromptRepo {
     pub fn new(path_spec: &Path) -> GitPromptRepo {
         let lg2_repo = git2::Repository::discover(path_spec).ok();
-        let mut root_path = PathBuf::new();
+        // let mut root_path = PathBuf::new();
+        let mut repo_state = git2::RepositoryState::Clean;
         let mut is_unborn = false;
         let mut has_head = false;
         let mut has_checkout = false;
 
         if let Some(ref repo) = lg2_repo {
-            root_path = repo.path().to_path_buf();
+            // root_path = repo.path().to_path_buf();
+            repo_state = repo.state();
             if let Err(e) = repo.head() {
                 is_unborn = e.code() == git2::ErrorCode::UnbornBranch;
             } else {
@@ -35,8 +38,9 @@ impl GitPromptRepo {
 
         GitPromptRepo {
             lg2_repo: lg2_repo,
-            origin_path: path_spec.to_path_buf(),
-            root_path: root_path,
+            // origin_path: path_spec.to_path_buf(),
+            // root_path: root_path,
+            repo_state: repo_state,
             is_unborn: is_unborn,
             has_head: has_head,
             has_checkout: has_checkout,
@@ -94,8 +98,8 @@ impl GitPromptRepo {
         for branch in branches_it {
             let ref branch_ref = branch.0.get();
             let peeled_obj_res = branch_ref.peel(git2::ObjectType::Commit);
-            if peeled_obj_res.is_ok() && peeled_obj_res.unwrap().id() == oid
-                && branch_ref.name().is_some()
+            if peeled_obj_res.is_ok() && peeled_obj_res.unwrap().id() == oid &&
+                branch_ref.name().is_some()
             {
                 candidate_branch_names.push(branch_ref.name().unwrap().to_string());
             }
@@ -117,44 +121,51 @@ impl GitPromptRepo {
 
     pub fn ref_name_head(&self) -> String {
         let mut ref_string = "".to_string();
-        // TODO: should instead check self.lg2_repo.state()
+        // TODO: should check more repo_state possibilities
         if self.is_unborn {
             ref_string = "[Unborn]".to_string();
-        } else if let Ok(rebasing_ref) = self.lg2_repo
-            .as_ref()
-            .unwrap()
-            .find_reference("rebase-apply/orig-head")
+        } else if self.repo_state == git2::RepositoryState::Rebase ||
+                   self.repo_state == git2::RepositoryState::RebaseInteractive ||
+                   self.repo_state == git2::RepositoryState::RebaseMerge
         {
-            // TODO: Should look at .git/rebase-apply/head-name rather than compute rebasing_name as we do here
-            let onto_ref = self.lg2_repo
-                .as_ref()
-                .unwrap()
-                .find_reference("rebase-apply/onto")
-                .unwrap();
-            let mut rebasing_name = String::new();
-            let mut onto_name = String::new();
-            self.build_ref_name_for_commit(
-                rebasing_ref
-                    .peel(git2::ObjectType::Commit)
+            // TODO: Should look at .git/rebase-apply/head-name rather than
+            // compute rebasing_name as we do here
+            if let Ok(rebasing_ref) = self.lg2_repo.as_ref().unwrap().find_reference(
+                "rebase-apply/orig-head",
+            )
+            {
+                let onto_ref = self.lg2_repo
+                    .as_ref()
                     .unwrap()
-                    .as_commit()
-                    .unwrap(),
-                &mut rebasing_name,
-            );
-            self.build_ref_name_for_commit(
-                onto_ref
-                    .peel(git2::ObjectType::Commit)
-                    .unwrap()
-                    .as_commit()
-                    .unwrap(),
-                &mut onto_name,
-            );
-            write!(
-                ref_string,
-                "\x1b[1;35m...rebasing\x1b[0m {} \x1b[1;35monto\x1b[0m {}",
-                rebasing_name,
-                onto_name
-            ).unwrap();
+                    .find_reference("rebase-apply/onto")
+                    .unwrap();
+                let mut rebasing_name = String::new();
+                let mut onto_name = String::new();
+                self.build_ref_name_for_commit(
+                    rebasing_ref
+                        .peel(git2::ObjectType::Commit)
+                        .unwrap()
+                        .as_commit()
+                        .unwrap(),
+                    &mut rebasing_name,
+                );
+                self.build_ref_name_for_commit(
+                    onto_ref
+                        .peel(git2::ObjectType::Commit)
+                        .unwrap()
+                        .as_commit()
+                        .unwrap(),
+                    &mut onto_name,
+                );
+                write!(
+                    ref_string,
+                    "\x1b[1;35m...rebasing\x1b[0m {} \x1b[1;35monto\x1b[0m {}",
+                    rebasing_name,
+                    onto_name
+                ).unwrap();
+            } else {
+                write!(ref_string, "unhandled rebase case").unwrap();
+            }
         } else if self.has_head {
             ref_string = self.head_name();
         }
@@ -215,7 +226,8 @@ impl GitPromptRepo {
                 opts.update_index(true)
                     .include_untracked(true)
                     .recurse_untracked_dirs(true),
-            )) {
+            ))
+            {
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_MODIFIED, "∂");
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_NEW, "…");
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_DELETED, "✖");
@@ -247,8 +259,8 @@ fn status_bit_to_string(statuses: &git2::Statuses, flag: git2::Status, prefix: &
 
 fn abbreviated_remote_branch_name(full_name: &String) -> Option<String> {
     let mut full_name_it = full_name.split('/').peekable();
-    if full_name_it.next() == Some("refs") && full_name_it.next() == Some("remotes")
-        && full_name_it.peek().is_some()
+    if full_name_it.next() == Some("refs") && full_name_it.next() == Some("remotes") &&
+        full_name_it.peek().is_some()
     {
         let mut abbreviated_name = full_name_it.next().unwrap().to_string();
         if full_name_it.peek().unwrap_or(&"").to_string() == "HEAD".to_string() {
