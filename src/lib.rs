@@ -37,13 +37,13 @@ impl GitPromptRepo {
         }
 
         GitPromptRepo {
-            lg2_repo: lg2_repo,
+            lg2_repo,
             // origin_path: path_spec.to_path_buf(),
-            // root_path: root_path,
-            repo_state: repo_state,
-            is_unborn: is_unborn,
-            has_head: has_head,
-            has_checkout: has_checkout,
+            // root_path,
+            repo_state,
+            is_unborn,
+            has_head,
+            has_checkout,
         }
     }
 
@@ -96,17 +96,17 @@ impl GitPromptRepo {
             .unwrap()
             .filter_map(|branch_result| branch_result.ok());
         for branch in branches_it {
-            let ref branch_ref = branch.0.get();
+            let branch_ref = &branch.0.get();
             let peeled_obj_res = branch_ref.peel(git2::ObjectType::Commit);
-            if peeled_obj_res.is_ok() && peeled_obj_res.unwrap().id() == oid &&
-                branch_ref.name().is_some()
+            if peeled_obj_res.is_ok() && peeled_obj_res.unwrap().id() == oid
+                && branch_ref.name().is_some()
             {
                 candidate_branch_names.push(branch_ref.name().unwrap().to_string());
             }
         }
         ref_string.clear();
         if candidate_branch_names.is_empty() {
-            let mut oid_string = "".to_string();
+            let mut oid_string = String::new();
             write!(oid_string, "{}", oid).unwrap();
             oid_string.truncate(8);
             write!(ref_string, "{}", oid_string).unwrap();
@@ -114,25 +114,26 @@ impl GitPromptRepo {
             write!(
                 ref_string,
                 "{}",
-                find_best_branch_name(candidate_branch_names)
+                find_best_branch_name(&candidate_branch_names)
             ).unwrap();
         }
     }
 
     pub fn ref_name_head(&self) -> String {
-        let mut ref_string = "".to_string();
+        let mut ref_string = String::new();
         // TODO: should check more repo_state possibilities
         if self.is_unborn {
             ref_string = "[Unborn]".to_string();
-        } else if self.repo_state == git2::RepositoryState::Rebase ||
-                   self.repo_state == git2::RepositoryState::RebaseInteractive ||
-                   self.repo_state == git2::RepositoryState::RebaseMerge
+        } else if self.repo_state == git2::RepositoryState::Rebase
+            || self.repo_state == git2::RepositoryState::RebaseInteractive
+            || self.repo_state == git2::RepositoryState::RebaseMerge
         {
             // TODO: Should look at .git/rebase-apply/head-name rather than
             // compute rebasing_name as we do here
-            if let Ok(rebasing_ref) = self.lg2_repo.as_ref().unwrap().find_reference(
-                "rebase-apply/orig-head",
-            )
+            if let Ok(rebasing_ref) = self.lg2_repo
+                .as_ref()
+                .unwrap()
+                .find_reference("rebase-apply/orig-head")
             {
                 let onto_ref = self.lg2_repo
                     .as_ref()
@@ -193,11 +194,11 @@ impl GitPromptRepo {
                 return name.to_string();
             }
         }
-        "".to_string()
+        String::new()
     }
 
     pub fn ahead_behind(&self) -> String {
-        let mut result = String::from("");
+        let mut result = String::new();
         if self.head_branch_has_upstream() {
             let head_branch = self.head_to_branch().unwrap();
             let upstream_branch = head_branch.upstream().unwrap();
@@ -219,15 +220,14 @@ impl GitPromptRepo {
     }
 
     pub fn status(&self) -> String {
-        let mut result = String::from("");
+        let mut result = String::new();
         if self.has_checkout {
             let mut opts = git2::StatusOptions::new();
             if let Ok(statuses) = self.lg2_repo.as_ref().unwrap().statuses(Some(
                 opts.update_index(true)
                     .include_untracked(true)
                     .recurse_untracked_dirs(true),
-            ))
-            {
+            )) {
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_MODIFIED, "∂");
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_NEW, "…");
                 result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_DELETED, "✖");
@@ -250,7 +250,7 @@ fn status_bit_to_string(statuses: &git2::Statuses, flag: git2::Status, prefix: &
         .iter()
         .filter(|s| s.status().contains(flag))
         .count();
-    let mut result = "".to_string();
+    let mut result = String::new();
     if count > 0 {
         write!(result, "{}{}\x1b[m", prefix, count).unwrap();
     }
@@ -259,11 +259,11 @@ fn status_bit_to_string(statuses: &git2::Statuses, flag: git2::Status, prefix: &
 
 fn abbreviated_remote_branch_name(full_name: &String) -> Option<String> {
     let mut full_name_it = full_name.split('/').peekable();
-    if full_name_it.next() == Some("refs") && full_name_it.next() == Some("remotes") &&
-        full_name_it.peek().is_some()
+    if full_name_it.next() == Some("refs") && full_name_it.next() == Some("remotes")
+        && full_name_it.peek().is_some()
     {
         let mut abbreviated_name = full_name_it.next().unwrap().to_string();
-        if full_name_it.peek().unwrap_or(&"").to_string() == "HEAD".to_string() {
+        if full_name_it.peek().unwrap_or(&"") == &"HEAD" {
             return None;
         }
         for s in full_name_it {
@@ -277,7 +277,7 @@ fn abbreviated_remote_branch_name(full_name: &String) -> Option<String> {
     None
 }
 
-fn find_best_branch_name(branch_names: Vec<String>) -> String {
+fn find_best_branch_name(branch_names: &[String]) -> String {
     // Transmute branch names into canonical shortened forms.
     // Also, remove all variants terminating in HEAD
     let working_branch_names: Vec<String> = branch_names
