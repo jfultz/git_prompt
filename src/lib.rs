@@ -169,9 +169,27 @@ impl GitPromptRepo {
                     rebasing_name, onto_name
                 )
                 .unwrap();
+            } else if self.lg2_repo.as_ref().unwrap().is_worktree() {
+                write!(ref_string, "worktree rebase").unwrap();
             } else {
                 write!(ref_string, "unhandled rebase case").unwrap();
             }
+        } else if self.repo_state == git2::RepositoryState::Revert
+            || self.repo_state == git2::RepositoryState::RevertSequence
+        {
+            write!(ref_string, "Reverting").unwrap();
+        } else if self.repo_state == git2::RepositoryState::CherryPick
+            || self.repo_state == git2::RepositoryState::CherryPickSequence
+        {
+            write!(ref_string, "Cherry-picking").unwrap();
+        } else if self.repo_state == git2::RepositoryState::ApplyMailbox
+            || self.repo_state == git2::RepositoryState::ApplyMailboxOrRebase
+        {
+            write!(ref_string, "Applying").unwrap();
+        } else if self.repo_state == git2::RepositoryState::Merge {
+            write!(ref_string, "Merging").unwrap();
+        } else if self.repo_state == git2::RepositoryState::Bisect {
+            write!(ref_string, "Bisecting").unwrap();
         } else if self.has_head {
             ref_string = self.head_name();
         }
@@ -235,14 +253,13 @@ impl GitPromptRepo {
                     .include_untracked(true)
                     .recurse_untracked_dirs(true),
             )) {
-                result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_MODIFIED, "∂");
-                result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_NEW, "…");
-                result += &status_bit_to_string(&statuses, git2::STATUS_INDEX_DELETED, "✖");
-                result +=
-                    &status_bit_to_string(&statuses, git2::STATUS_CONFLICTED, "\x1b[31;1m≠");
-                result += &status_bit_to_string(&statuses, git2::STATUS_WT_MODIFIED, "\x1b[34m∂");
-                result += &status_bit_to_string(&statuses, git2::STATUS_WT_NEW, "\x1b[34m…");
-                result += &status_bit_to_string(&statuses, git2::STATUS_WT_DELETED, "\x1b[34m✖");
+                result += &status_bit_to_string(&statuses, git2::Status::INDEX_MODIFIED, "∂");
+                result += &status_bit_to_string(&statuses, git2::Status::INDEX_NEW, "…");
+                result += &status_bit_to_string(&statuses, git2::Status::INDEX_DELETED, "✖");
+                result += &status_bit_to_string(&statuses, git2::Status::CONFLICTED, "\x1b[31;1m≠");
+                result += &status_bit_to_string(&statuses, git2::Status::WT_MODIFIED, "\x1b[34m∂");
+                result += &status_bit_to_string(&statuses, git2::Status::WT_NEW, "\x1b[34m…");
+                result += &status_bit_to_string(&statuses, git2::Status::WT_DELETED, "\x1b[34m✖");
             }
             if result.is_empty() {
                 result = String::from("\x1b[36m√\x1b[m");

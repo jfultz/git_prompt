@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["John Fultz <jfultz@wolfram.com>"]
 
 [dependencies]
-git2 = "0.6.8"
+git2 = "0.13"
